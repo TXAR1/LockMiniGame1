@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTL Schiebepuzzle 3x3</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2em;
+        }
+
+        .puzzle-container {
+            display: inline-block;
+            background: #333;
+            padding: 5px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .puzzle-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 2px;
+            width: 300px;
+            height: 300px;
+        }
+
+        .puzzle-tile {
+            background-size: 300px 300px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .puzzle-tile:hover {
+            filter: brightness(1.1);
+            transform: scale(1.02);
+        }
+
+        .puzzle-tile:active {
+            transform: scale(0.98);
+        }
+
+        .empty-tile {
+            background: #222 !important;
+            cursor: default;
+        }
+
+        .empty-tile:hover {
+            filter: none;
+            transform: none;
+        }
+
+        .controls {
+            margin: 20px 0;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .status {
+            margin: 20px 0;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .moves-counter {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .win-message {
+            color: #4CAF50;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+
+        .original-image {
+            width: 200px;
+            height: 200px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧩 RTL Schiebepuzzle</h1>
+        
+        <div class="puzzle-container">
+            <div class="puzzle-grid" id="puzzleGrid"></div>
+        </div>
+        
+        <div class="status">
+            <div class="moves-counter">Züge: <span id="movesCount">0</span></div>
+            <div id="winMessage" class="win-message" style="display: none;">
+                🎉 Herzlichen Glückwunsch! Puzzle gelöst! 🎉
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="btn" onclick="shufflePuzzle()">Neu mischen</button>
+            <button class="btn" onclick="resetPuzzle()">Zurücksetzen</button>
+        </div>
+        
+        <div>
+            <p><strong>Lösungsbild:</strong></p>
+            <canvas id="originalImage" class="original-image" width="300" height="300"></canvas>
+        </div>
+        
+        <div style="margin-top: 20px; color: #666; max-width: 400px;">
+            <p><strong>Spielanleitung:</strong> Klicken Sie auf eine Kachel neben dem leeren Feld, um sie zu verschieben. Das Puzzle ist absichtlich einfach gehalten - Sie sollten es in 3-7 Zügen lösen können!</p>
+        </div>
+    </div>
+
+    <script>
+        // RTL Logo erstellen für 3x3 Puzzle
+        function createRTLImage() {
+            const canvas = document.getElementById('originalImage');
+            const ctx = canvas.getContext('2d');
+            
+            // Canvas für 3x3 Raster anpassen (300x300px)
+            canvas.width = 300;
+            canvas.height = 300;
+            
+            // R - Blau (linke Spalte)
+            ctx.fillStyle = '#2E5BFF';
+            ctx.fillRect(0, 0, 100, 300);
+            
+            // T - Lila (mittlere Spalte)
+            ctx.fillStyle = '#A855F7';
+            ctx.fillRect(100, 0, 100, 300);
+            
+            // L - Pink (rechte Spalte)
+            ctx.fillStyle = '#EC4899';
+            ctx.fillRect(200, 0, 100, 300);
+            
+            // Buchstaben in weiß - größer für bessere Sichtbarkeit
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 120px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // R
+            ctx.fillText('R', 50, 150);
+            
+            // T
+            ctx.fillText('T', 150, 150);
+            
+            // L
+            ctx.fillText('L', 250, 150);
+            
+            return canvas.toDataURL();
+        }
+
+        class SlidingPuzzle {
+            constructor() {
+                this.size = 3;
+                this.tiles = [];
+                this.emptyIndex = 8; // Leeres Feld startet rechts unten
+                this.moves = 0;
+                this.imageData = createRTLImage();
+                this.isWon = false;
+                
+                this.initializePuzzle();
+                this.renderPuzzle();
+                this.shufflePuzzle();
+            }
+            
+            initializePuzzle() {
+                // Kacheln von 0-8 initialisieren (8 ist das leere Feld)
+                for (let i = 0; i < this.size * this.size; i++) {
+                    this.tiles[i] = i;
+                }
+            }
+            
+            renderPuzzle() {
+                const grid = document.getElementById('puzzleGrid');
+                grid.innerHTML = '';
+                
+                for (let i = 0; i < this.size * this.size; i++) {
+                    const tile = document.createElement('div');
+                    tile.className = 'puzzle-tile';
+                    tile.onclick = () => this.moveTile(i);
+                    
+                    if (this.tiles[i] === 8) {
+                        // Leeres Feld
+                        tile.classList.add('empty-tile');
+                    } else {
+                        // Berechne Position der Kachel im Originalbild
+                        // tileNum ist die ursprüngliche Position der Kachel (0-7)
+                        const tileNum = this.tiles[i];
+                        const row = Math.floor(tileNum / this.size);
+                        const col = tileNum % this.size;
+                        
+                        tile.style.backgroundImage = `url(${this.imageData})`;
+                        // Jede Kachel ist 100x100px, das Originalbild ist jetzt 300x300px
+                        tile.style.backgroundPosition = `-${col * 100}px -${row * 100}px`;
+                        tile.style.backgroundSize = '300px 300px';
+                    }
+                    
+                    grid.appendChild(tile);
+                }
+                
+                document.getElementById('movesCount').textContent = this.moves;
+            }
+            
+            moveTile(index) {
+                if (this.isWon) return;
+                
+                // Prüfe ob die Kachel neben dem leeren Feld ist
+                if (this.canMove(index)) {
+                    // Tausche Kachel mit leerem Feld
+                    [this.tiles[index], this.tiles[this.emptyIndex]] = [this.tiles[this.emptyIndex], this.tiles[index]];
+                    this.emptyIndex = index;
+                    this.moves++;
+                    
+                    this.renderPuzzle();
+                    this.checkWin();
+                }
+            }
+            
+            canMove(index) {
+                const row = Math.floor(index / this.size);
+                const col = index % this.size;
+                const emptyRow = Math.floor(this.emptyIndex / this.size);
+                const emptyCol = this.emptyIndex % this.size;
+                
+                // Prüfe ob die Kachel horizontal oder vertikal neben dem leeren Feld ist
+                return (Math.abs(row - emptyRow) === 1 && col === emptyCol) ||
+                       (Math.abs(col - emptyCol) === 1 && row === emptyRow);
+            }
+            
+            shufflePuzzle() {
+                this.isWon = false;
+                this.moves = 0;
+                document.getElementById('winMessage').style.display = 'none';
+                
+                // Nur wenige einfache Züge für leichtes Lösen (3-7 Züge)
+                const shuffleMoves = 3 + Math.floor(Math.random() * 5); // 3-7 Züge
+                
+                for (let i = 0; i < shuffleMoves; i++) {
+                    const possibleMoves = [];
+                    
+                    for (let j = 0; j < this.size * this.size; j++) {
+                        if (j !== this.emptyIndex && this.canMove(j)) {
+                            possibleMoves.push(j);
+                        }
+                    }
+                    
+                    if (possibleMoves.length > 0) {
+                        const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                        [this.tiles[randomMove], this.tiles[this.emptyIndex]] = [this.tiles[this.emptyIndex], this.tiles[randomMove]];
+                        this.emptyIndex = randomMove;
+                    }
+                }
+                
+                this.moves = 0;
+                this.renderPuzzle();
+            }
+            
+            resetPuzzle() {
+                this.isWon = false;
+                this.moves = 0;
+                this.emptyIndex = 8;
+                document.getElementById('winMessage').style.display = 'none';
+                
+                this.initializePuzzle();
+                this.renderPuzzle();
+            }
+            
+            checkWin() {
+                let isCorrect = true;
+                for (let i = 0; i < this.size * this.size; i++) {
+                    if (this.tiles[i] !== i) {
+                        isCorrect = false;
+                        break;
+                    }
+                }
+                
+                if (isCorrect) {
+                    this.isWon = true;
+                    document.getElementById('winMessage').style.display = 'block';
+                }
+            }
+        }
+        
+        // Puzzle initialisieren
+        let puzzle;
+        
+        window.onload = function() {
+            puzzle = new SlidingPuzzle();
+        };
+        
+        function shufflePuzzle() {
+            puzzle.shufflePuzzle();
+        }
+        
+        function resetPuzzle() {
+            puzzle.resetPuzzle();
+        }
+    </script>
+</body>
+</html>
